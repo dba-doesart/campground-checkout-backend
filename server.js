@@ -63,7 +63,7 @@ app.post('/create-checkout-session', async (req, res) => {
       success_url: 'https://campgroundguides.com/success',
       cancel_url: 'https://campgroundguides.com/cancel'
     });
-
+   console.log("Stripe session created:", session.url);
     res.json({ checkoutUrl: session.url });
   } catch (err) {
     console.error("Stripe session error:", err.message);
