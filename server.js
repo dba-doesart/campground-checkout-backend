@@ -1,7 +1,12 @@
 const express = require('express');
+const cors = require('cors'); // ✅ Add CORS support
 const app = express();
-const stripe = require('stripe')('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'); // Live Stripe key
+
+// ✅ Allow requests from your frontend domain
+app.use(cors({ origin: 'https://campgroundguides.com' }));
 app.use(express.json());
+
+const stripe = require('stripe')('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'); // Live Stripe key
 
 const priceMap = {
   // Single Park
