@@ -1,6 +1,6 @@
 const express = require('express');
 const app = express();
-const stripe = require('stripe')('sk_test_YOUR_SECRET_KEY'); // Replace with your actual Stripe secret key
+const stripe = require('stripe')('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'); // Replace with your actual Stripe secret key
 app.use(express.json());
 
 const priceMap = {
@@ -33,8 +33,8 @@ app.post('/create-checkout-session', async (req, res) => {
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       line_items: lineItems,
-      success_url: 'https://yourdomain.com/success',
-      cancel_url: 'https://yourdomain.com/cancel'
+      success_url: 'https://campgroundguides.com/success',
+      cancel_url: 'https://campgroundguides.com/cancel'
     });
 
     res.json({ checkoutUrl: session.url });
