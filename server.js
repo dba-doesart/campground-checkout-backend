@@ -58,11 +58,15 @@ app.post('/create-checkout-session', async (req, res) => {
     console.log("Creating Stripe session with:", lineItems);
 
     const session = await stripe.checkout.sessions.create({
-      mode: 'subscription',
-      line_items: lineItems,
-      success_url: 'https://campgroundguides.com/success',
-      cancel_url: 'https://campgroundguides.com/cancel'
-    });
+  mode: 'subscription',
+  payment_method_types: ['card'],
+  line_items: lineItems,
+  success_url: 'https://campgroundguides.com/success',
+  cancel_url: 'https://campgroundguides.com/cancel',
+  metadata: {
+    business_name: req.body.businessName
+  }
+});
    console.log("Stripe session created:", session.url);
     res.json({ checkoutUrl: session.url });
   } catch (err) {
