@@ -6,8 +6,7 @@ const app = express();
 app.use(cors({ origin: 'https://campgroundguides.com' }));
 app.use(express.json());
 
-const stripe = require('stripe')('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'); // Live Stripe key
-
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const priceMap = {
   // Single Park
   cherokee_single_monthly: 'price_1S5FgaHw2ZCjSnG42ICAxf7i',
