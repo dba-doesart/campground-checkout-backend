@@ -36,7 +36,7 @@ const priceMap = {
 };
 
 app.post('/create-checkout-session', async (req, res) => {
-  const { parks, billing } = req.body;
+  const { parks, billing, businessName, contactName } = req.body;
 
   if (!parks || parks.length === 0 || !billing) {
     return res.status(400).json({ error: 'Missing park selections or billing option.' });
