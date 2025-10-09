@@ -3,12 +3,12 @@ const cors = require('cors'); // ✅ Add CORS support
 const app = express();
 
 // ✅ Allow requests from your frontend domain
-const cors = require('cors');
 app.use(cors({
   origin: 'https://campgroundguides.com',
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type']
 }));
+
 app.use(express.json());
 
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
