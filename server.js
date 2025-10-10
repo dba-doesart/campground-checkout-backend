@@ -1,3 +1,4 @@
+const { parks, billing, businessName, businessAddress, businessPhone, contactName } = req.body;
 const express = require('express');
 const cors = require('cors'); // ✅ Add CORS support
 const app = express();
@@ -41,7 +42,7 @@ const priceMap = {
 };
 
 app.post('/create-checkout-session', async (req, res) => {
-  const { parks, billing, businessName, contactName } = req.body;
+  const { parks, billing, businessName, businessAddress, businessPhone, contactName } = req.body;
 
   if (!parks || parks.length === 0 || !billing) {
     return res.status(400).json({ error: 'Missing park selections or billing option.' });
@@ -61,14 +62,17 @@ app.post('/create-checkout-session', async (req, res) => {
 
     console.log("Creating Stripe session with:", lineItems);
 
-    const session = await stripe.checkout.sessions.create({
+   const session = await stripe.checkout.sessions.create({
   mode: 'subscription',
   payment_method_types: ['card'],
   line_items: lineItems,
   success_url: 'https://campgroundguides.com/success',
   cancel_url: 'https://campgroundguides.com/cancel',
   metadata: {
-    business_name: req.body.businessName
+    business_name: businessName || '',
+    business_address: businessAddress || '',
+    business_phone: businessPhone || '',
+    contact_name: contactName || ''
   }
 });
    console.log("Stripe session created:", session.url);
