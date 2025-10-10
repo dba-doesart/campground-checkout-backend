@@ -1,4 +1,4 @@
-const { parks, billing, businessName, businessAddress, businessPhone, contactName } = req.body;
+
 const express = require('express');
 const cors = require('cors'); // ✅ Add CORS support
 const app = express();
