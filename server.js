@@ -42,12 +42,45 @@ const priceMap = {
 };
 
 app.post('/create-checkout-session', async (req, res) => {
-  const { parks, billing, businessName, businessAddress, businessPhone, contactName } = req.body;
+  try {
+    const {
+      businessName,
+      businessAddress,
+      businessPhone,
+      contactName,
+      priceId
+    } = req.body;
 
-  if (!parks || parks.length === 0 || !billing) {
-    return res.status(400).json({ error: 'Missing park selections or billing option.' });
+    if (!priceId) {
+      return res.status(400).json({ error: 'Missing price ID.' });
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price: priceId,
+          quantity: 1
+        }
+      ],
+      success_url: 'https://campgroundguides.com/success',
+      cancel_url: 'https://campgroundguides.com/cancel',
+      metadata: {
+        business_name: businessName || '',
+        business_address: businessAddress || '',
+        business_phone: businessPhone || '',
+        contact_name: contactName || ''
+      }
+    });
+
+    return res.json({ checkoutUrl: session.url });
+
+  } catch (err) {
+    console.error('Stripe session error:', err);
+    return res.status(500).json({ error: 'Failed to create checkout session.' });
   }
-
+});
   try {
     const lineItems = parks.map(parkKey => {
       const priceId = priceMap[`${parkKey}_${billing}`];
