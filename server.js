@@ -9,7 +9,54 @@ app.use(cors({
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type']
 }));
+import Stripe from "stripe";
+import express from "express";
+import bodyParser from "body-parser";
 
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+app.post(
+  "/webhook",
+  bodyParser.raw({ type: "application/json" }),
+  (request, response) => {
+    const sig = request.headers["stripe-signature"];
+
+    let event;
+
+    try {
+      event = stripe.webhooks.constructEvent(
+        request.body,
+        sig,
+        endpointSecret
+      );
+    } catch (err) {
+      console.log("⚠️ Webhook signature verification failed.", err.message);
+      return response.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    // Handle the event
+    switch (event.type) {
+      case "payment_intent.succeeded":
+        console.log("💰 Payment succeeded:", event.data.object.id);
+        break;
+      case "payment_intent.payment_failed":
+        console.log("❌ Payment failed:", event.data.object.id);
+        break;
+      case "charge.refunded":
+        console.log("🔄 Charge refunded:", event.data.object.id);
+        break;
+      case "charge.dispute.created":
+        console.log("⚠️ Dispute created:", event.data.object.id);
+        break;
+      default:
+        console.log(`Unhandled event type ${event.type}`);
+    }
+
+    response.sendStatus(200);
+  }
+);
 app.use(express.json());
 
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
