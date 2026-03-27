@@ -119,7 +119,15 @@ app.post("/create-checkout-session", async (req, res) => {
       .json({ error: "Failed to create checkout session." });
   }
 });
+// ---------------------------------------------
+// REFERRAL API — receives data from Make.com
+// ---------------------------------------------
+app.post("/api/referrals", (req, res) => {
+  console.log("📩 Incoming referral:", req.body);
 
+  // Temporary success response
+  res.json({ message: "Referral received successfully" });
+});
 // ---------------------------------------------
 // START SERVER
 // ---------------------------------------------
