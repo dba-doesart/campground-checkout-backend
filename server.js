@@ -15,6 +15,14 @@ const Stripe = require("stripe");
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
 const app = express();
+const rateLimit = require('express-rate-limit');
+const paymentAttemptLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 3, // 3 attempts per IP per hour
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many payment attempts. Please try again later.'
+});
 
 // ---------------------------------------------
 // CORS — allow your frontend domain
@@ -375,15 +383,23 @@ const priceMap = {
 // -----------------------------
 // CREATE CHECKOUT SESSION
 // -----------------------------
-app.post("/create-checkout-session", async (req, res) => {
-  const { parks, billing, referral, businessName } = req.body;
+app.post("/create-checkout-session", paymentAttemptLimiter, async (req, res) => {
+const referer = req.get("referer");
+  const sessionId = req.cookies?.sessionId; // adjust if you use a different session system
 
+  if (!sessionId) {
+    return res.status(400).json({ error: "Session required." });
+  }
+
+  if (!referer || !referer.startsWith("https://campgroundguides.com")) {
+    return res.status(400).json({ error: "Invalid request origin." });
+  }
   if (!parks || parks.length === 0 || !billing) {
     return res
       .status(400)
       .json({ error: "Missing park selections or billing option." });
   }
-
+  const { parks, billing, referral, businessName } = req.body;
   try {
     const {
       businessName,
@@ -425,7 +441,67 @@ app.post("/create-checkout-session", async (req, res) => {
       .json({ error: "Failed to create checkout session." });
   }
 });
+// ---------------------------------------------
+// CREATE AFFILIATE
+// ---------------------------------------------
+app.post("/create-affiliate", async (req, res) => {
+  try {
+    const { name, email, businessName, website } = req.body;
 
+    if (!name || !email) {
+      return res.status(400).json({ error: "Name and email are required." });
+    }
+
+    // Load existing affiliates
+    const affiliatesPath = path.join(__dirname, "affiliates.json");
+    const affiliatesData = fs.readFileSync(affiliatesPath, "utf8");
+    const affiliates = JSON.parse(affiliatesData);
+
+    // Generate referral code
+    const referralCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+
+    // Create affiliate object
+    const affiliate = {
+      id: Date.now().toString(),
+      name,
+      email,
+      businessName,
+      website,
+      referralCode,
+      stripePromoCodeId: null,
+      createdAt: new Date().toISOString()
+    };
+
+    // ---------------------------------------------
+    // CREATE STRIPE PROMO CODE
+    // ---------------------------------------------
+    const promo = await stripe.promotionCodes.create({
+      coupon: "Affiliate10", // your coupon ID
+      code: referralCode,
+      metadata: {
+        affiliateId: affiliate.id,
+        affiliateEmail: affiliate.email
+      }
+    });
+
+    affiliate.stripePromoCodeId = promo.id;
+
+    // Save affiliate to JSON file
+    affiliates.push(affiliate);
+    fs.writeFileSync(affiliatesPath, JSON.stringify(affiliates, null, 2));
+
+    // Respond
+    res.json({
+      success: true,
+      affiliate,
+      promoCode: promo.code
+    });
+
+  } catch (err) {
+    console.error("Affiliate creation error:", err);
+    res.status(500).json({ error: "Failed to create affiliate." });
+  }
+});
 // ---------------------------------------------
 // REFERRAL ENDPOINT FOR MAKE.COM
 // ---------------------------------------------
