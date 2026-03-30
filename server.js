@@ -14,6 +14,13 @@ const nodemailer = require("nodemailer");
 const Stripe = require("stripe");
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
+});
 const app = express();
 const rateLimit = require('express-rate-limit');
 const paymentAttemptLimiter = rateLimit({
