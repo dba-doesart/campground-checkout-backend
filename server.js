@@ -250,7 +250,29 @@ app.post("/api/affiliate-referral", async (req, res) => {
       affiliateLink,
       createdAt: new Date().toISOString(),
     };
+// ---------------------------------------------
+// Create Stripe Promotion Code for this affiliate
+// ---------------------------------------------
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
+let stripePromo;
+try {
+  stripePromo = await stripe.promotionCodes.create({
+    coupon: "Earn10ReferralFee", // <-- replace with your actual coupon ID if needed
+    code: affiliateCode,         // use the unique code you generated
+    max_redemptions: 1,
+    metadata: {
+      referrerFirstName,
+      referrerLastName,
+      referrerEmail,
+      referredBusinessName,
+    },
+  });
+
+  newAffiliate.stripePromoId = stripePromo.id;
+} catch (err) {
+  console.error("Error creating Stripe promo code:", err);
+}
     affiliates.push(newAffiliate);
     saveAffiliates(affiliates);
 
