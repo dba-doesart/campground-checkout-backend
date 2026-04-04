@@ -3,32 +3,33 @@
 // Stripe Checkout + ACH + Webhooks + Affiliates
 // ---------------------------------------------
 
+require("dotenv").config();
+
 const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
 const fs = require("fs");
 const path = require("path");
 const nodemailer = require("nodemailer");
-
-// Stripe initialization (only once)
+const rateLimit = require("express-rate-limit");
 const Stripe = require("stripe");
+
+// ---------------------------------------------
+// Stripe initialization (single instance)
+// ---------------------------------------------
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  }
-});
+// ---------------------------------------------
+// Express app + rate limiting
+// ---------------------------------------------
 const app = express();
-const rateLimit = require('express-rate-limit');
+
 const paymentAttemptLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 3, // 3 attempts per IP per hour
   standardHeaders: true,
   legacyHeaders: false,
-  message: 'Too many payment attempts. Please try again later.'
+  message: "Too many payment attempts. Please try again later.",
 });
 
 // ---------------------------------------------
@@ -125,6 +126,23 @@ function saveAffiliates(affiliates) {
 }
 
 // ---------------------------------------------
+// Payout JSON helpers
+// ---------------------------------------------
+const payoutsFilePath = path.join(__dirname, "payouts.json");
+
+function loadPayouts() {
+  if (!fs.existsSync(payoutsFilePath)) {
+    fs.writeFileSync(payoutsFilePath, JSON.stringify([], null, 2));
+  }
+  const data = fs.readFileSync(payoutsFilePath, "utf8");
+  return JSON.parse(data || "[]");
+}
+
+function savePayouts(payouts) {
+  fs.writeFileSync(payoutsFilePath, JSON.stringify(payouts, null, 2));
+}
+
+// ---------------------------------------------
 // REF-##### generator
 // ---------------------------------------------
 function generateAffiliateCode(existingCodes = []) {
@@ -178,7 +196,7 @@ Campground Guides
   // Internal notification to Diana & Wade
   await mailer.sendMail({
     from: fromHeader,
-    to: "wadeanddiana@gmail.com",
+    to: ["wadeanddiana@gmail.com", "info@campgroundguides.com"],
     subject: `New Affiliate Referral Submitted: ${referrerFirstName} ${referrerLastName}`,
     text: `
 A new affiliate referral has been submitted.
@@ -203,7 +221,126 @@ Permission Confirmed: ${affiliate.permissionConfirmed ? "Yes" : "No"}
 }
 
 // ---------------------------------------------
-// Affiliate creation endpoint
+// Payout confirmation email
+// ---------------------------------------------
+async function sendPayoutConfirmationEmail(payoutRecord, affiliate) {
+  const fromHeader = `"Campground Guides" <campgroundguides@gmail.com>`;
+
+  const subject = `Affiliate Payout Submitted: ${affiliate.referrerFirstName} ${affiliate.referrerLastName}`;
+  const text = `
+A new affiliate payout has been submitted.
+
+Affiliate Code: ${payoutRecord.affiliateCode}
+Method: ${payoutRecord.method}
+Details: ${payoutRecord.details}
+Date: ${payoutRecord.date}
+
+Referrer: ${affiliate.referrerFirstName} ${affiliate.referrerLastName}
+Referrer Email: ${affiliate.referrerEmail}
+Referred Business: ${affiliate.referredBusinessName}
+
+- Campground Guides Backend
+  `.trim();
+
+  await mailer.sendMail({
+    from: fromHeader,
+    to: ["wadeanddiana@gmail.com", "info@campgroundguides.com"],
+    subject,
+    text,
+  });
+}
+
+// -----------------------------
+// PRICE MAP FOR ALL PARKS
+// (kept for future use if needed)
+// -----------------------------
+const priceMap = {
+  // Single Park
+  cherokee_single_monthly: "price_1S5FgaHw2ZCjSnG42ICAxf7i",
+  cherokee_single_annual: "price_1S5FsxHw2ZCjSnG43MHiN6hj",
+  meltonhill_single_monthly: "price_1S5FkjHw2ZCjSnG4rXhBv5Zk",
+  meltonhill_single_annual: "price_1S5FrfHw2ZCjSnG41ipCFeY5",
+  yarberry_single_monthly: "price_1S5FmFHw2ZCjSnG4VaUbYu1a",
+  yarberry_single_annual: "price_1S5FpUHw2ZCjSnG4tqc0qHKl",
+  greenlee_maysprings_single_monthly: "price_1S5FdFHw2ZCjSnG4wh4S9R72",
+  greenlee_maysprings_single_annual: "price_1S5FugHw2ZCjSnG47pEr2XyA",
+  greenlee_original_single_monthly: "price_1S5FcNHw2ZCjSnG4Nc5Fn6va",
+  greenlee_original_single_annual: "price_1S5FvnHw2ZCjSnG4qJEDpbi9",
+
+  // Multi Park Monthly
+  cherokee_multi_monthly: "price_1S5F1aHw2ZCjSnG4MSfCkIh1",
+  meltonhill_multi_monthly: "price_1S5F3DHw2ZCjSnG4VVlvmFo5",
+  yarberry_multi_monthly: "price_1S5F4SHw2ZCjSnG4LNXwCf0L",
+  greenlee_maysprings_multi_monthly: "price_1S5EyMHw2ZCjSnG4xE7YmDkQ",
+  greenlee_original_multi_monthly: "price_1S5EwwHw2ZCjSnG4OLIgEwk0",
+
+  // Multi Park Annual
+  cherokee_multi_annual: "price_1S5EgRHw2ZCjSnG4pU8Ooac2",
+  meltonhill_multi_annual: "price_1S5EiHHw2ZCjSnG4dzd4hNOQ",
+  yarberry_multi_annual: "price_1S5EjGHw2ZCjSnG4MtRNHluA",
+  greenlee_maysprings_multi_annual: "price_1S5EdHHw2ZCjSnG4zCtJX6U1",
+  greenlee_original_multi_annual: "price_1S5EbCHw2ZCjSnG4HaYqjRLl",
+};
+
+// -----------------------------
+// CREATE CHECKOUT SESSION
+// -----------------------------
+app.post(
+  "/create-checkout-session",
+  paymentAttemptLimiter,
+  async (req, res) => {
+    try {
+      const referer = req.get("referer");
+
+      if (!referer || !referer.startsWith("https://campgroundguides.com")) {
+        return res.status(400).json({ error: "Invalid request origin." });
+      }
+
+      const {
+        businessName,
+        businessAddress,
+        businessPhone,
+        contactName,
+        priceId,
+        referral,
+      } = req.body;
+
+      if (!priceId) {
+        return res.status(400).json({ error: "Missing price ID." });
+      }
+
+      const session = await stripe.checkout.sessions.create({
+        mode: "subscription",
+        payment_method_types: ["card", "us_bank_account"],
+        line_items: [
+          {
+            price: priceId,
+            quantity: 1,
+          },
+        ],
+        success_url: "https://campgroundguides.com/success",
+        cancel_url: "https://campgroundguides.com/cancel",
+        metadata: {
+          referral: referral || "none",
+          business_name: businessName || "",
+          business_address: businessAddress || "",
+          business_phone: businessPhone || "",
+          contact_name: contactName || "",
+        },
+      });
+
+      return res.json({ checkoutUrl: session.url });
+    } catch (err) {
+      console.error("Stripe session error:", err);
+      return res
+        .status(500)
+        .json({ error: "Failed to create checkout session." });
+    }
+  }
+);
+
+// ---------------------------------------------
+// Affiliate creation endpoint (Option B)
 // ---------------------------------------------
 app.post("/api/affiliate-referral", async (req, res) => {
   try {
@@ -250,32 +387,33 @@ app.post("/api/affiliate-referral", async (req, res) => {
       affiliateLink,
       createdAt: new Date().toISOString(),
     };
-// ---------------------------------------------
-// Create Stripe Promotion Code for this affiliate
-// ---------------------------------------------
-const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
-let stripePromo;
-try {
-  stripePromo = await stripe.promotionCodes.create({
-    coupon: "Earn10ReferralFee", // <-- replace with your actual coupon ID if needed
-    code: affiliateCode,         // use the unique code you generated
-    max_redemptions: 1,
-    metadata: {
-      referrerFirstName,
-      referrerLastName,
-      referrerEmail,
-      referredBusinessName,
-    },
-  });
+    // ---------------------------------------------
+    // Create Stripe Promotion Code (Earn10ReferralFee)
+    // ---------------------------------------------
+    try {
+      const stripePromo = await stripe.promotionCodes.create({
+        coupon: "Earn10ReferralFee",
+        code: affiliateCode,
+        max_redemptions: 1,
+        metadata: {
+          referrerFirstName,
+          referrerLastName,
+          referrerEmail,
+          referredBusinessName,
+        },
+      });
 
-  newAffiliate.stripePromoId = stripePromo.id;
-} catch (err) {
-  console.error("Error creating Stripe promo code:", err);
-}
+      newAffiliate.stripePromoId = stripePromo.id;
+    } catch (err) {
+      console.error("Error creating Stripe promo code:", err);
+    }
+
+    // Save affiliate
     affiliates.push(newAffiliate);
     saveAffiliates(affiliates);
 
+    // Send welcome email + internal notification
     await sendAffiliateWelcomeEmail(newAffiliate);
 
     return res.status(200).json({
@@ -288,61 +426,9 @@ try {
     return res.status(500).json({ error: "Internal server error" });
   }
 });
+
 // ---------------------------------------------
-// Log referral from Make.com
-// ---------------------------------------------
-app.post("/api/log-referral", async (req, res) => {
-  try {
-    const {
-      affiliateCode,
-      advertiserName,
-      subscriptionId,
-      amount,
-      billingCycle,
-      email,
-      phone,
-    } = req.body;
-
-    if (!affiliateCode || !advertiserName || !subscriptionId) {
-      return res.status(400).json({ error: "Missing required fields" });
-    }
-
-    // Load affiliates to match the affiliateCode
-    const affiliates = loadAffiliates();
-    const affiliate = affiliates.find(a => a.affiliateCode === affiliateCode);
-
-    if (!affiliate) {
-      return res.status(404).json({ error: "Affiliate not found" });
-    }
-
-    // Create referral record
-    const referrals = loadReferrals();
-    const referralRecord = {
-      affiliateCode,
-      advertiserName,
-      subscriptionId,
-      amount: amount || 0,
-      billingCycle: billingCycle || "unknown",
-      email: email || "",
-      phone: phone || "",
-      date: new Date().toISOString(),
-      paid: false
-    };
-
-    referrals.push(referralRecord);
-    saveReferrals(referrals);
-
-    // Notify affiliate + internal
-    await sendCommissionEmail(referralRecord, affiliate);
-
-    return res.status(200).json({ success: true, referralRecord });
-  } catch (err) {
-    console.error("Error logging referral:", err);
-    return res.status(500).json({ error: "Internal server error" });
-  }
-});
-// ---------------------------------------------
-// Affiliate payout submission (Make.com or form)
+// Payout submitted endpoint
 // ---------------------------------------------
 app.post("/api/payout-submitted", async (req, res) => {
   try {
@@ -353,7 +439,9 @@ app.post("/api/payout-submitted", async (req, res) => {
     }
 
     const affiliates = loadAffiliates();
-    const affiliate = affiliates.find(a => a.affiliateCode === affiliateCode);
+    const affiliate = affiliates.find(
+      (a) => a.affiliateCode === affiliateCode
+    );
 
     if (!affiliate) {
       return res.status(404).json({ error: "Affiliate not found" });
@@ -364,7 +452,7 @@ app.post("/api/payout-submitted", async (req, res) => {
       affiliateCode,
       method,
       details,
-      date: new Date().toISOString()
+      date: new Date().toISOString(),
     };
 
     payouts.push(payoutRecord);
@@ -378,161 +466,9 @@ app.post("/api/payout-submitted", async (req, res) => {
     return res.status(500).json({ error: "Internal server error" });
   }
 });
-// -----------------------------
-// PRICE MAP FOR ALL PARKS
-// -----------------------------
-const priceMap = {
-  // Single Park
-  cherokee_single_monthly: "price_1S5FgaHw2ZCjSnG42ICAxf7i",
-  cherokee_single_annual: "price_1S5FsxHw2ZCjSnG43MHiN6hj",
-  meltonhill_single_monthly: "price_1S5FkjHw2ZCjSnG4rXhBv5Zk",
-  meltonhill_single_annual: "price_1S5FrfHw2ZCjSnG41ipCFeY5",
-  yarberry_single_monthly: "price_1S5FmFHw2ZCjSnG4VaUbYu1a",
-  yarberry_single_annual: "price_1S5FpUHw2ZCjSnG4tqc0qHKl",
-  greenlee_maysprings_single_monthly: "price_1S5FdFHw2ZCjSnG4wh4S9R72",
-  greenlee_maysprings_single_annual: "price_1S5FugHw2ZCjSnG47pEr2XyA",
-  greenlee_original_single_monthly: "price_1S5FcNHw2ZCjSnG4Nc5Fn6va",
-  greenlee_original_single_annual: "price_1S5FvnHw2ZCjSnG4qJEDpbi9",
 
-  // Multi Park Monthly
-  cherokee_multi_monthly: "price_1S5F1aHw2ZCjSnG4MSfCkIh1",
-  meltonhill_multi_monthly: "price_1S5F3DHw2ZCjSnG4VVlvmFo5",
-  yarberry_multi_monthly: "price_1S5F4SHw2ZCjSnG4LNXwCf0L",
-  greenlee_maysprings_multi_monthly: "price_1S5EyMHw2ZCjSnG4xE7YmDkQ",
-  greenlee_original_multi_monthly: "price_1S5EwwHw2ZCjSnG4OLIgEwk0",
-
-  // Multi Park Annual
-  cherokee_multi_annual: "price_1S5EgRHw2ZCjSnG4pU8Ooac2",
-  meltonhill_multi_annual: "price_1S5EiHHw2ZCjSnG4dzd4hNOQ",
-  yarberry_multi_annual: "price_1S5EjGHw2ZCjSnG4MtRNHluA",
-  greenlee_maysprings_multi_annual: "price_1S5EdHHw2ZCjSnG4zCtJX6U1",
-  greenlee_original_multi_annual: "price_1S5EbCHw2ZCjSnG4HaYqjRLl",
-};
-
-// -----------------------------
-// CREATE CHECKOUT SESSION
-// -----------------------------
-app.post("/create-checkout-session", paymentAttemptLimiter, async (req, res) => {
-const referer = req.get("referer");
-  const sessionId = req.cookies?.sessionId; // adjust if you use a different session system
-
-  if (!sessionId) {
-    return res.status(400).json({ error: "Session required." });
-  }
-
-  if (!referer || !referer.startsWith("https://campgroundguides.com")) {
-    return res.status(400).json({ error: "Invalid request origin." });
-  }
-  if (!parks || parks.length === 0 || !billing) {
-    return res
-      .status(400)
-      .json({ error: "Missing park selections or billing option." });
-  }
-  const { parks, billing, referral, businessName } = req.body;
-  try {
-    const {
-      businessName,
-      businessAddress,
-      businessPhone,
-      contactName,
-      priceId,
-    } = req.body;
-
-    if (!priceId) {
-      return res.status(400).json({ error: "Missing price ID." });
-    }
-
-    const session = await stripe.checkout.sessions.create({
-      mode: "subscription",
-      payment_method_types: ["card", "us_bank_account"],
-      line_items: [
-        {
-          price: priceId,
-          quantity: 1,
-        },
-      ],
-      success_url: "https://campgroundguides.com/success",
-      cancel_url: "https://campgroundguides.com/cancel",
-      metadata: {
-        referral: referral || "none",
-        business_name: businessName || "",
-        business_address: businessAddress || "",
-        business_phone: businessPhone || "",
-        contact_name: contactName || "",
-      },
-    });
-
-    return res.json({ checkoutUrl: session.url });
-  } catch (err) {
-    console.error("Stripe session error:", err);
-    return res
-      .status(500)
-      .json({ error: "Failed to create checkout session." });
-  }
-});
 // ---------------------------------------------
-// CREATE AFFILIATE
-// ---------------------------------------------
-app.post("/create-affiliate", async (req, res) => {
-  try {
-    const { name, email, businessName, website } = req.body;
-
-    if (!name || !email) {
-      return res.status(400).json({ error: "Name and email are required." });
-    }
-
-    // Load existing affiliates
-    const affiliatesPath = path.join(__dirname, "affiliates.json");
-    const affiliatesData = fs.readFileSync(affiliatesPath, "utf8");
-    const affiliates = JSON.parse(affiliatesData);
-
-    // Generate referral code
-    const referralCode = Math.random().toString(36).substring(2, 10).toUpperCase();
-
-    // Create affiliate object
-    const affiliate = {
-      id: Date.now().toString(),
-      name,
-      email,
-      businessName,
-      website,
-      referralCode,
-      stripePromoCodeId: null,
-      createdAt: new Date().toISOString()
-    };
-
-    // ---------------------------------------------
-    // CREATE STRIPE PROMO CODE
-    // ---------------------------------------------
-    const promo = await stripe.promotionCodes.create({
-      coupon: "Affiliate10", // your coupon ID
-      code: referralCode,
-      metadata: {
-        affiliateId: affiliate.id,
-        affiliateEmail: affiliate.email
-      }
-    });
-
-    affiliate.stripePromoCodeId = promo.id;
-
-    // Save affiliate to JSON file
-    affiliates.push(affiliate);
-    fs.writeFileSync(affiliatesPath, JSON.stringify(affiliates, null, 2));
-
-    // Respond
-    res.json({
-      success: true,
-      affiliate,
-      promoCode: promo.code
-    });
-
-  } catch (err) {
-    console.error("Affiliate creation error:", err);
-    res.status(500).json({ error: "Failed to create affiliate." });
-  }
-});
-// ---------------------------------------------
-// REFERRAL ENDPOINT FOR MAKE.COM
+// REFERRAL ENDPOINT FOR MAKE.COM (logging only)
 // ---------------------------------------------
 app.post("/api/referrals", (req, res) => {
   console.log("📩 Incoming referral:", req.body);
@@ -543,8 +479,6 @@ app.post("/api/referrals", (req, res) => {
 // START SERVER
 // ---------------------------------------------
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () =>
-  console.log(`✅ Server running on port ${PORT}`)
-);
+app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
 
 console.log("Stripe key loaded:", !!process.env.STRIPE_SECRET_KEY);
