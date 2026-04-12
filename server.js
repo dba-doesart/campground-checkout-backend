@@ -1,6 +1,6 @@
 // ===============================
 //  Campground Guides Backend
-//  Full server.js (Final Version)
+//  Full server.js (Clean Version)
 // ===============================
 
 import express from "express";
@@ -16,6 +16,11 @@ const app = express();
 // -------------------------------
 // Middleware
 // -------------------------------
+
+// Parse JSON bodies
+app.use(express.json());
+
+// CORS
 app.use(
   cors({
     origin: "https://campgroundguides.com",
@@ -144,9 +149,7 @@ app.post("/api/referrals", async (req, res) => {
       console.error("Email sending failed:", emailError);
     }
 
-    // -------------------------------
-    // SUCCESS RESPONSE (FINAL)
-    // -------------------------------
+    // SUCCESS RESPONSE
     return res.status(200).json({
       success: true,
       message: "Referral submitted successfully",
