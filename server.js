@@ -16,11 +16,11 @@ const app = express();
 // -------------------------------
 // Middleware
 // -------------------------------
-app.use(express.json());
 app.use(
   cors({
-    origin: "*",
+    origin: "https://campgroundguides.com",
     methods: ["GET", "POST"],
+    allowedHeaders: ["Content-Type"],
   })
 );
 
