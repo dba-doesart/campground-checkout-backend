@@ -1,13 +1,13 @@
 // ===============================
 //  Campground Guides Backend
-//  Full server.js (Complete File)
+//  Full server.js (Final Version)
 // ===============================
 
 import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
 import dotenv from "dotenv";
-import sendEmail from "./sendEmail.js"; // Existing email function
+import sendEmail from "./sendEmail.js";
 
 dotenv.config();
 
@@ -28,13 +28,13 @@ app.use(
 // MongoDB Connection
 // -------------------------------
 mongoose
-  .connect(process.env.MONGODB_URI)
+  .connect(process.env.MONGO_URI)
   .then(() => console.log("MongoDB connected"))
   .catch((err) => console.error("MongoDB connection error:", err));
+
 // -------------------------------
 // Database Schemas
 // -------------------------------
-
 const ReferrerSchema = new mongoose.Schema({
   first_name: String,
   last_name: String,
@@ -59,10 +59,10 @@ const Referral = mongoose.model("Referral", ReferralSchema);
 // -------------------------------
 // Referral Submission Route
 // -------------------------------
-
 app.post("/api/referrals", async (req, res) => {
-    console.log("🔥 Referral endpoint hit");
+  console.log("🔥 Referral endpoint hit");
   console.log("Incoming body:", req.body);
+
   try {
     const {
       referring_first_name,
@@ -77,7 +77,7 @@ app.post("/api/referrals", async (req, res) => {
       permission,
     } = req.body;
 
-    // Basic required field check
+    // Required fields
     if (
       !referring_first_name ||
       !referring_last_name ||
@@ -92,17 +92,15 @@ app.post("/api/referrals", async (req, res) => {
       });
     }
 
-    // Normalize permission to a real boolean
+    // Normalize permission
     const permissionBoolean =
       permission === true ||
       permission === "true" ||
       permission === "Yes" ||
       permission === "yes";
 
-    // 1. Create or find the referrer
-    let referrer = await Referrer.findOne({
-      email: referring_email,
-    });
+    // Find or create referrer
+    let referrer = await Referrer.findOne({ email: referring_email });
 
     if (!referrer) {
       referrer = await Referrer.create({
@@ -113,7 +111,7 @@ app.post("/api/referrals", async (req, res) => {
       });
     }
 
-    // 2. Create the referral record
+    // Create referral
     const referral = await Referral.create({
       referrer: referrer._id,
       business_referred,
@@ -124,7 +122,7 @@ app.post("/api/referrals", async (req, res) => {
       permission: permissionBoolean,
     });
 
-    // 3. Send notification email
+    // Send email
     try {
       await sendEmail({
         to: "info@campgroundguides.com",
@@ -144,17 +142,19 @@ app.post("/api/referrals", async (req, res) => {
       });
     } catch (emailError) {
       console.error("Email sending failed:", emailError);
-      // Don't fail the whole request just because email failed
     }
 
-    res.status(200).json({
+    // -------------------------------
+    // SUCCESS RESPONSE (FINAL)
+    // -------------------------------
+    return res.status(200).json({
       success: true,
       message: "Referral submitted successfully",
       referral,
     });
   } catch (error) {
     console.error("Referral submission failed:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: "Server error",
     });
