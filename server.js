@@ -61,6 +61,8 @@ const Referral = mongoose.model("Referral", ReferralSchema);
 // -------------------------------
 
 app.post("/api/referrals", async (req, res) => {
+    console.log("🔥 Referral endpoint hit");
+  console.log("Incoming body:", req.body);
   try {
     const {
       referring_first_name,
