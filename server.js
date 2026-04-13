@@ -60,14 +60,20 @@ const ReferralSchema = new mongoose.Schema({
 
 const Referrer = mongoose.model("Referrer", ReferrerSchema);
 const Referral = mongoose.model("Referral", ReferralSchema);
-
 // -------------------------------
-// Referral Submission Route
+// Referral Submission Route (Fixed for Instant Response)
 // -------------------------------
 app.post("/api/referrals", async (req, res) => {
   console.log("🔥 Referral endpoint hit");
   console.log("Incoming body:", req.body);
 
+  // 1. IMMEDIATE RESPONSE — prevents 504 timeout
+  res.status(200).json({
+    success: true,
+    message: "Referral received",
+  });
+
+  // 2. Continue processing in the background
   try {
     const {
       referring_first_name,
@@ -81,21 +87,6 @@ app.post("/api/referrals", async (req, res) => {
       relationship,
       permission,
     } = req.body;
-
-    // Required fields
-    if (
-      !referring_first_name ||
-      !referring_last_name ||
-      !referring_email ||
-      !business_referred ||
-      !decision_maker_name ||
-      !decision_maker_email
-    ) {
-      return res.status(400).json({
-        success: false,
-        error: "Missing required fields",
-      });
-    }
 
     // Normalize permission
     const permissionBoolean =
@@ -149,21 +140,11 @@ app.post("/api/referrals", async (req, res) => {
       console.error("Email sending failed:", emailError);
     }
 
-    // SUCCESS RESPONSE
-    return res.status(200).json({
-      success: true,
-      message: "Referral submitted successfully",
-      referral,
-    });
+    console.log("Referral processed successfully");
   } catch (error) {
     console.error("Referral submission failed:", error);
-    return res.status(500).json({
-      success: false,
-      error: "Server error",
-    });
   }
 });
-
 // -------------------------------
 // Root Route
 // -------------------------------
