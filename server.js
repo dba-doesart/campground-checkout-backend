@@ -6,13 +6,13 @@
 // ----------------------
 // Imports & Setup
 // ----------------------
-const express = require("express");
-const cors = require("cors");
-const dotenv = require("dotenv");
-const mongoose = require("mongoose");
-const sgMail = require("@sendgrid/mail");
-const morgan = require("morgan");
-const path = require("path");
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import mongoose from "mongoose";
+import sgMail from "@sendgrid/mail";
+import morgan from "morgan";
+import path from "path";
 
 // Load environment variables from .env (in local dev; Render injects env vars)
 dotenv.config();
