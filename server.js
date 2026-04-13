@@ -160,9 +160,37 @@ function logError(context, error) {
 }
 
 // ======================================================
-// Routes
+// Routes Referrals
 // ======================================================
+const express = require("express");
+const router = express.Router();
+const Referral = require("../models/Referral"); // adjust path to your model
+const sgMail = require("@sendgrid/mail");
 
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+
+// POST /api/referrals
+router.post("/", async (req, res) => {
+  console.log("🔥 Referral endpoint hit");
+  try {
+    const referral = new Referral(req.body);
+    await referral.save();
+
+    await sgMail.send({
+      to: "info@campgroundguides.com",
+      from: process.env.EMAIL_USER,
+      templateId: process.env.SENDGRID_TEMPLATE_ID,
+      dynamic_template_data: req.body
+    });
+
+    res.status(200).json({ message: "Referral submitted successfully" });
+  } catch (err) {
+    console.error("❌ Referral submission error:", err);
+    res.status(500).json({ error: "Referral submission failed" });
+  }
+});
+
+module.exports = router;
 // ----------------------
 // Health Check
 // ----------------------
