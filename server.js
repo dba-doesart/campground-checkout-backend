@@ -1,11 +1,8 @@
 // ======================================================
 // Campground Guides Referral API - server.js
-// Clean, unified version
+// Corrected version with proper field names
 // ======================================================
 
-// ----------------------
-// Imports & Setup
-// ----------------------
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -14,20 +11,13 @@ import sgMail from "@sendgrid/mail";
 import morgan from "morgan";
 import path from "path";
 
-// Load environment variables
 dotenv.config();
 
-// ----------------------
-// Basic Config
-// ----------------------
 const app = express();
 app.set("trust proxy", 1);
 app.use(express.json());
 app.use(morgan(":method :url :status :res[content-length] - :response-time ms"));
 
-// ----------------------
-// CORS Configuration
-// ----------------------
 const allowedOrigins = [
   "https://campgroundguides.com",
   "https://www.campgroundguides.com",
@@ -52,9 +42,6 @@ app.use(
 
 app.options("*", cors());
 
-// ----------------------
-// Environment Validation
-// ----------------------
 const PORT = process.env.PORT || 5000;
 const MONGODB_URI = process.env.MONGODB_URI;
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
@@ -65,16 +52,10 @@ if (!SENDGRID_API_KEY) console.error("❌ Missing SENDGRID_API_KEY");
 if (!SENDGRID_TEMPLATE_ID) console.error("❌ Missing SENDGRID_TEMPLATE_ID");
 if (!MONGODB_URI) console.error("❌ Missing MONGODB_URI");
 
-// ----------------------
-// SendGrid Setup
-// ----------------------
 if (SENDGRID_API_KEY) {
   sgMail.setApiKey(SENDGRID_API_KEY);
 }
 
-// ----------------------
-// MongoDB / Mongoose Setup
-// ----------------------
 if (MONGODB_URI) {
   mongoose
     .connect(MONGODB_URI)
@@ -87,10 +68,16 @@ if (MONGODB_URI) {
 // ----------------------
 const referralSchema = new mongoose.Schema(
   {
-    referrerName: { type: String, required: true },
-    referrerEmail: { type: String, required: true },
-    friendName: { type: String, required: true },
-    friendEmail: { type: String, required: true },
+    referrer_name: { type: String, required: true },
+    referrer_last_name: { type: String, required: true },
+    referrer_email: { type: String, required: true },
+    referrer_business: { type: String, required: true },
+    business: { type: String, required: true },
+    dm_name: { type: String, required: true }, // or decision_maker_name
+    dm_email: { type: String, required: true }, // or decision_maker_email
+    dm_phone: { type: String, required: true }, // or decision_maker_phone
+    relationship: { type: String, required: true },
+    permission: { type: String, enum: ["yes", "no"], required: true },
     source: { type: String, default: "referral-form" },
     status: { type: String, default: "email_sent" },
     errorMessage: { type: String, default: null },
@@ -105,9 +92,6 @@ try {
   Referral = mongoose.model("Referral", referralSchema);
 }
 
-// ----------------------
-// Utility Helpers
-// ----------------------
 function normalizeEmail(email) {
   return email ? String(email).trim().toLowerCase() : "";
 }
@@ -148,20 +132,45 @@ app.post("/api/referral", async (req, res) => {
   console.log("📩 Incoming referral submission body:", req.body);
 
   try {
-    const { referrerName, referrerEmail, friendName, friendEmail } = req.body;
+    const {
+      referrer_name,
+      referrer_last_name,
+      referrer_email,
+      referrer_business,
+      business,
+      dm_name,
+      dm_email,
+      dm_phone,
+      relationship,
+      permission,
+    } = req.body;
 
-    if (!referrerName || !referrerEmail || !friendName || !friendEmail) {
+    if (
+      !referrer_name ||
+      !referrer_last_name ||
+      !referrer_email ||
+      !referrer_business ||
+      !business ||
+      !dm_name ||
+      !dm_email ||
+      !dm_phone ||
+      !relationship ||
+      typeof permission === "undefined"
+    ) {
       return res.status(400).json({ success: false, error: "Missing required fields" });
     }
 
-    const normalizedReferrerEmail = normalizeEmail(referrerEmail);
-    const normalizedFriendEmail = normalizeEmail(friendEmail);
+    const normalizedReferrerEmail = normalizeEmail(referrer_email);
+    const normalizedDmEmail = normalizeEmail(dm_email);
 
     if (!isValidEmail(normalizedReferrerEmail)) {
       return res.status(400).json({ success: false, error: "Invalid referrer email format" });
     }
-    if (!isValidEmail(normalizedFriendEmail)) {
-      return res.status(400).json({ success: false, error: "Invalid friend email format" });
+    if (!isValidEmail(normalizedDmEmail)) {
+      return res.status(400).json({ success: false, error: "Invalid decision maker email format" });
+    }
+    if (!["yes", "no"].includes(permission)) {
+      return res.status(400).json({ success: false, error: "Permission must be yes or no" });
     }
 
     if (!SENDGRID_API_KEY || !SENDGRID_TEMPLATE_ID) {
@@ -169,21 +178,27 @@ app.post("/api/referral", async (req, res) => {
     }
 
     const msg = {
-      to: normalizedFriendEmail,
+      to: normalizedDmEmail,
       from: FROM_EMAIL,
       templateId: SENDGRID_TEMPLATE_ID,
       dynamic_template_data: {
-        referrerName,
-        referrerEmail: normalizedReferrerEmail,
-        friendName,
-        friendEmail: normalizedFriendEmail,
+        referrer_name,
+        referrer_last_name,
+        referrer_email: normalizedReferrerEmail,
+        referrer_business,
+        business,
+        dm_name,
+        dm_email: normalizedDmEmail,
+        dm_phone,
+        relationship,
+        permission,
       },
     };
 
     let emailError = null;
     try {
       await sgMail.send(msg);
-      console.log("✅ SendGrid email sent to:", normalizedFriendEmail);
+      console.log("✅ SendGrid email sent to:", normalizedDmEmail);
     } catch (err) {
       emailError = err;
       logError("SendGrid send", err);
@@ -192,10 +207,16 @@ app.post("/api/referral", async (req, res) => {
     if (MONGODB_URI) {
       try {
         await Referral.create({
-          referrerName,
-          referrerEmail: normalizedReferrerEmail,
-          friendName,
-          friendEmail: normalizedFriendEmail,
+          referrer_name,
+          referrer_last_name,
+          referrer_email: normalizedReferrerEmail,
+          referrer_business,
+          business,
+          dm_name,
+          dm_email: normalizedDmEmail,
+          dm_phone,
+          relationship,
+          permission,
           status: emailError ? "failed" : "email_sent",
           errorMessage: emailError ? emailError.message : null,
         });
