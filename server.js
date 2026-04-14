@@ -144,7 +144,7 @@ app.post("/api/referral", async (req, res) => {
       relationship,
       permission,
     } = req.body;
-
+  }
     // Required field check
     if (
       !referrer_name ||
@@ -250,6 +250,7 @@ sgMail.send(msg)
     }
 
     return res.redirect("https://campgroundguides.com/thank-you-affiliate");
+
   } catch (error) {
     logError("Referral endpoint", error);
     return res.status(500).json({ success: false, error: "Failed to process referral" });
