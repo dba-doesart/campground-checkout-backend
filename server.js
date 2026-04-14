@@ -144,21 +144,35 @@ app.post("/api/referral", async (req, res) => {
   console.log("📩 Incoming referral submission body:", req.body);
 
   try {
-    const { referrerName, referrerEmail, friendName, friendEmail } = req.body;
+//    const { referrerName, referrerEmail, friendName, friendEmail } = req.body;
+const {
+  referrer_name,
+  referrer_last_name,
+  referrer_email,
+  referrer_business,
+  business,
+  dm_name,
+  dm_email,
+  dm_phone,
+  relationship,
+  permission
+} = req.body;
+// Required field check
+if (!referrer_name || !referrer_email || !dm_name || !dm_email) {
+  return res.status(400).json({ success: false, error: "Missing required fields" });
+}
 
-    if (!referrerName || !referrerEmail || !friendName || !friendEmail) {
-      return res.status(400).json({ success: false, error: "Missing required fields" });
-    }
+// Normalize emails
+const normalizedReferrerEmail = normalizeEmail(referrer_email);
+const normalizedDmEmail = normalizeEmail(dm_email);
 
-    const normalizedReferrerEmail = normalizeEmail(referrerEmail);
-    const normalizedFriendEmail = normalizeEmail(friendEmail);
-
-    if (!isValidEmail(normalizedReferrerEmail)) {
-      return res.status(400).json({ success: false, error: "Invalid referrer email format" });
-    }
-    if (!isValidEmail(normalizedFriendEmail)) {
-      return res.status(400).json({ success: false, error: "Invalid friend email format" });
-    }
+// Validate email formats
+if (!isValidEmail(normalizedReferrerEmail)) {
+  return res.status(400).json({ success: false, error: "Invalid referrer email format" });
+}
+if (!isValidEmail(normalizedDmEmail)) {
+  return res.status(400).json({ success: false, error: "Invalid DM email format" });
+}
 
     if (!SENDGRID_API_KEY || !SENDGRID_TEMPLATE_ID) {
       return res.status(500).json({ success: false, error: "Email service not configured" });
