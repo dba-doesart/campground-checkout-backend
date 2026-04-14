@@ -233,10 +233,7 @@ app.post("/api/referral", async (req, res) => {
       return res.status(500).json({ success: false, error: "Failed to send referral email" });
     }
 
-    return res.status(200).json({
-      success: true,
-      redirect: "https://campgroundguides.com/thank-you-affiliate",
-    });
+    return res.redirect("https://campgroundguides.com/thank-you-affiliate");
   } catch (error) {
     logError("Referral endpoint", error);
     return res.status(500).json({ success: false, error: "Failed to process referral" });
