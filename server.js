@@ -145,21 +145,21 @@ app.post("/api/referral", async (req, res) => {
       permission,
     } = req.body;
 
+    // Required field check
     if (
       !referrer_name ||
       !referrer_last_name ||
       !referrer_email ||
-      !referrer_business ||
       !business ||
       !dm_name ||
       !dm_email ||
-      !dm_phone ||
       !relationship ||
-      typeof permission === "undefined"
+      !permission
     ) {
       return res.status(400).json({ success: false, error: "Missing required fields" });
     }
 
+    // Normalize and validate emails
     const normalizedReferrerEmail = normalizeEmail(referrer_email);
     const normalizedDmEmail = normalizeEmail(dm_email);
 
@@ -169,41 +169,45 @@ app.post("/api/referral", async (req, res) => {
     if (!isValidEmail(normalizedDmEmail)) {
       return res.status(400).json({ success: false, error: "Invalid decision maker email format" });
     }
-    if (!["yes", "no"].includes(permission)) {
-      return res.status(400).json({ success: false, error: "Permission must be yes or no" });
+
+    // Permission must be "yes" (checkbox checked)
+    if (permission !== "yes") {
+      return res.status(400).json({ success: false, error: "Permission must be yes" });
     }
 
     if (!SENDGRID_API_KEY || !SENDGRID_TEMPLATE_ID) {
       return res.status(500).json({ success: false, error: "Email service not configured" });
     }
 
+    // Build SendGrid message with template variables
     const msg = {
-      to: normalizedDmEmail,
+      to: "info@campgroundguides.com", // notify your team
       from: FROM_EMAIL,
       templateId: SENDGRID_TEMPLATE_ID,
       dynamic_template_data: {
-        referrer_name,
-        referrer_last_name,
-        referrer_email: normalizedReferrerEmail,
-        referrer_business,
-        business,
-        dm_name,
-        dm_email: normalizedDmEmail,
-        dm_phone,
-        relationship,
-        permission,
+        referring_first_name: referrer_name,
+        referring_last_name: referrer_last_name,
+        referring_email: normalizedReferrerEmail,
+        referring_business: referrer_business,
+        business_referred: business,
+        decision_maker_name: dm_name,
+        decision_maker_email: normalizedDmEmail,
+        decision_maker_phone: dm_phone,
+        relationship: relationship,
+        permission: permission
       },
     };
 
     let emailError = null;
     try {
       await sgMail.send(msg);
-      console.log("✅ SendGrid email sent to:", normalizedDmEmail);
+      console.log("✅ SendGrid email sent to info@campgroundguides.com");
     } catch (err) {
       emailError = err;
       logError("SendGrid send", err);
     }
 
+    // Save referral to MongoDB
     if (MONGODB_URI) {
       try {
         await Referral.create({
