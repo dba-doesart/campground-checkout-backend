@@ -242,7 +242,7 @@ sgMail.send(msg)
         });
       } catch (dbErr) {
         logError("MongoDB save referral", dbErr);
-      }
+      
     }
 
     if (emailError) {
