@@ -144,7 +144,7 @@ app.post("/api/referral", async (req, res) => {
       relationship,
       permission,
     } = req.body;
-  }
+  
     // Required field check
     if (
       !referrer_name ||
