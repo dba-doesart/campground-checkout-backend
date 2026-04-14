@@ -170,28 +170,23 @@ if (emailError) {
 
 return res.redirect("https://campgroundguides.com/thank-you-affiliate");
 
-// Save referral to MongoDB
+    // Save referral to MongoDB
+    await Referral.create({
+      referrer_name,
+      referrer_last_name,
+      referrer_email: normalizedReferrerEmail,
+      referrer_business,
+      business,
+      dm_name,
+      dm_email: normalizedDmEmail,
+      dm_phone,
+      relationship,
+      permission,
+      status: emailError ? "failed" : "email_sent",
+      errorMessage: emailError ? emailError.message : null,
+    });
 
-        await Referral.create({
-          referrer_name,
-          referrer_last_name,
-          referrer_email: normalizedReferrerEmail,
-          referrer_business,
-          business,
-          dm_name,
-          dm_email: normalizedDmEmail,
-          dm_phone,
-          relationship,
-          permission,
-          status: emailError ? "failed" : "email_sent",
-          errorMessage: emailError ? emailError.message : null,
-        });
-      } catch (dbErr) {
-        logError("MongoDB save referral", dbErr);
-      
-    }
-
-    if (emailError) {
+        if (emailError) {
       return res.status(500).json({ success: false, error: "Failed to send referral email" });
     }
 
