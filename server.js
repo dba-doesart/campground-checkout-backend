@@ -197,19 +197,35 @@ app.post("/api/referral", async (req, res) => {
         permission: permission
       },
     };
+// old template send commented out
+ //   if (MONGODB_URI) {
+ //     try {
+ //   await sgMail.send(msg);
+//   console.log("✅ SendGrid email sent to info@campgroundguides.com");
+// } catch (err) {
+//   emailError = err;
+//   logError("SendGrid send", err);
+// }
 
-    let emailError = null;
-    try {
-      await sgMail.send(msg);
-      console.log("✅ SendGrid email sent to info@campgroundguides.com");
-    } catch (err) {
-      emailError = err;
-      logError("SendGrid send", err);
-    }
+const msg = {
+  to: 'campgroundguides@gmail.com',   // test recipient
+  from: process.env.FROM_EMAIL,       // Gmail sender
+  reply_to: 'info@campgroundguides.com',
+  subject: 'Referral Test',
+  text: 'This is a test email to confirm redirect flow.',
+};
 
-    // Save referral to MongoDB
-    if (MONGODB_URI) {
-      try {
+sgMail.send(msg)
+  .then(() => {
+    console.log('✅ Test email sent successfully');
+  })
+  .catch((error) => {
+    console.error('❌ SendGrid error:', error);
+    emailError = error;
+  });
+
+// Save referral to MongoDB
+
         await Referral.create({
           referrer_name,
           referrer_last_name,
