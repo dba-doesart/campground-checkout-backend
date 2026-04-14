@@ -128,101 +128,47 @@ app.get("/", (req, res) => {
 // ----------------------
 // Referral Submission
 // ----------------------
-app.post("/api/referral", async (req, res) => {
-  console.log("📩 Incoming referral submission body:", req.body);
+// Required field check
+if (!referrer_name || !referrer_email || !dm_name || !dm_email) {
+  return res.status(400).json({ success: false, error: "Missing required fields" });
+}
 
-  try {
-    const {
-      referrer_name,
-      referrer_last_name,
-      referrer_email,
-      referrer_business,
-      business,
-      dm_name,
-      dm_email,
-      dm_phone,
-      relationship,
-      permission,
-    } = req.body;
-  
-    // Required field check
-    if (
-      !referrer_name ||
-      !referrer_last_name ||
-      !referrer_email ||
-      !business ||
-      !dm_name ||
-      !dm_email ||
-      !relationship ||
-      !permission
-    ) {
-      return res.status(400).json({ success: false, error: "Missing required fields" });
-    }
-
-    // Normalize and validate emails
-    const normalizedReferrerEmail = normalizeEmail(referrer_email);
-    const normalizedDmEmail = normalizeEmail(dm_email);
-
-    if (!isValidEmail(normalizedReferrerEmail)) {
-      return res.status(400).json({ success: false, error: "Invalid referrer email format" });
-    }
-    if (!isValidEmail(normalizedDmEmail)) {
-      return res.status(400).json({ success: false, error: "Invalid decision maker email format" });
-    }
-
-    // Permission must be "yes" (checkbox checked)
-    if (permission !== "yes") {
-      return res.status(400).json({ success: false, error: "Permission must be yes" });
-    }
-
-    if (!SENDGRID_API_KEY || !SENDGRID_TEMPLATE_ID) {
-      return res.status(500).json({ success: false, error: "Email service not configured" });
-    }
-
-    // Build SendGrid message with template variables
-    // const msg = {
-//      to: "info@campgroundguides.com", // notify your team
-//      from: FROM_EMAIL,
-//      templateId: SENDGRID_TEMPLATE_ID,
-//      dynamic_template_data: {
-//        referring_first_name: referrer_name,
-//      referring_last_name: referrer_last_name,
-//        referring_email: normalizedReferrerEmail,
-//        referring_business: referrer_business,
-//        business_referred: business,
-//        decision_maker_name: dm_name,
-//        decision_maker_email: normalizedDmEmail,
-//        decision_maker_phone: dm_phone,
-//        relationship: relationship,
-//        permission: permission
-//      },
-//    };
-// old template send commented out
- //   if (MONGODB_URI) {
- //     try {
- //   await sgMail.send(msg);
-//   console.log("✅ SendGrid email sent to info@campgroundguides.com");
-// } catch (err) {
-//   emailError = err;
-//   logError("SendGrid send", err);
-// }
-
+// Build plain text message
 const msg = {
-  to: 'campgroundguides@gmail.com',   // test recipient
-  from: process.env.FROM_EMAIL,       // Gmail sender
+  to: 'campgroundguides@gmail.com',
+  from: process.env.FROM_EMAIL,
   reply_to: 'info@campgroundguides.com',
   subject: 'Referral Test',
   text: 'This is a test email to confirm redirect flow.',
 };
 
-sgMail.send(msg)
-  .then(() => {
-    console.log('✅ Test email sent successfully');
-  })
-  .catch((error) => {
-    console.error('❌ SendGrid error:', error);
-    emailError = error;
-  });
+let emailError = null;
+await sgMail.send(msg).catch((error) => {
+  console.error('❌ SendGrid error:', error);
+  emailError = error;
+});
+
+// Save referral to MongoDB
+await Referral.create({
+  referrer_name,
+  referrer_last_name,
+  referrer_email: referrer_email.toLowerCase(),
+  referrer_business,
+  business,
+  dm_name,
+  dm_email: dm_email.toLowerCase(),
+  dm_phone,
+  relationship,
+  permission,
+  status: emailError ? "failed" : "email_sent",
+  errorMessage: emailError ? emailError.message : null,
+});
+
+if (emailError) {
+  return res.status(500).json({ success: false, error: "Failed to send referral email" });
+}
+
+return res.redirect("https://campgroundguides.com/thank-you-affiliate");
 
 // Save referral to MongoDB
 
