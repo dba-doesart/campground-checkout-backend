@@ -128,6 +128,38 @@ app.get("/", (req, res) => {
 // ----------------------
 // Referral Submission
 // ----------------------
+app.post("/api/referral", async (req, res) => {
+  console.log("📩 Incoming referral submission body:", req.body);
+
+  try {
+    const {
+      referrer_name,
+      referrer_last_name,
+      referrer_email,
+      referrer_business,
+      business,
+      dm_name,
+      dm_email,
+      dm_phone,
+      relationship,
+      permission,
+    } = req.body;
+
+    // Required field check
+    if (!referrer_name || !referrer_email || !dm_name || !dm_email) {
+      return res.status(400).json({ success: false, error: "Missing required fields" });
+    }
+
+    // … rest of your logic …
+
+    return res.redirect("https://campgroundguides.com/thank-you-affiliate");
+
+  } catch (error) {
+    logError("Referral endpoint", error);
+    return res.status(500).json({ success: false, error: "Failed to process referral" });
+  }
+});
+
 // Required field check
 if (!referrer_name || !referrer_email || !dm_name || !dm_email) {
   return res.status(400).json({ success: false, error: "Missing required fields" });
