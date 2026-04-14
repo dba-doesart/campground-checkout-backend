@@ -180,23 +180,23 @@ app.post("/api/referral", async (req, res) => {
     }
 
     // Build SendGrid message with template variables
-    const msg = {
-      to: "info@campgroundguides.com", // notify your team
-      from: FROM_EMAIL,
-      templateId: SENDGRID_TEMPLATE_ID,
-      dynamic_template_data: {
-        referring_first_name: referrer_name,
-        referring_last_name: referrer_last_name,
-        referring_email: normalizedReferrerEmail,
-        referring_business: referrer_business,
-        business_referred: business,
-        decision_maker_name: dm_name,
-        decision_maker_email: normalizedDmEmail,
-        decision_maker_phone: dm_phone,
-        relationship: relationship,
-        permission: permission
-      },
-    };
+    // const msg = {
+//      to: "info@campgroundguides.com", // notify your team
+//      from: FROM_EMAIL,
+//      templateId: SENDGRID_TEMPLATE_ID,
+//      dynamic_template_data: {
+//        referring_first_name: referrer_name,
+//      referring_last_name: referrer_last_name,
+//        referring_email: normalizedReferrerEmail,
+//        referring_business: referrer_business,
+//        business_referred: business,
+//        decision_maker_name: dm_name,
+//        decision_maker_email: normalizedDmEmail,
+//        decision_maker_phone: dm_phone,
+//        relationship: relationship,
+//        permission: permission
+//      },
+//    };
 // old template send commented out
  //   if (MONGODB_URI) {
  //     try {
