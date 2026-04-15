@@ -80,38 +80,37 @@ app.post("/submit-referral", async (req, res) => {
       return res.status(400).json({ error: "Missing or invalid required fields." });
     }
 
-    // Save to MongoDB
+    // Save referral to MongoDB
     const referral = new Referral({
       referrerName: `${referrer_name} ${referrer_last_name}`,
       referrerEmail: referrer_email,
       friendName: dm_name,
       friendEmail: dm_email,
       source: "referral-form",
-      status: "email_sent",
+      status: "submitted",
     });
-
     await referral.save();
 
-    // Send notification email
+    // Send "Thank You for Referral" email
     const msg = {
-      to: "info@campgroundguides.com",
-      from: "no-reply@campgroundguides.com",
-      subject: "New Advertiser Referral Submitted",
-      text: `
-Referral details:
-Referrer: ${referrer_name} ${referrer_last_name}
-Email: ${referrer_email}
-Business: ${referrer_business || ""}
-Advertiser Business: ${business}
-Decision Maker: ${dm_name}
-DM Email: ${dm_email}
-DM Phone: ${dm_phone || ""}
-Relationship: ${relationship}
-Permission: ${permission}
-      `,
+      to: referrer_email,
+      from: FROM_EMAIL,
+      templateId: process.env.SENDGRID_TEMPLATE_ID_THANKYOU,
+      dynamic_template_data: {
+        referrer_name,
+        business,
+      },
     };
-
     await sgMail.send(msg);
+
+    // Notify admin
+    const adminMsg = {
+      to: "info@campgroundguides.com",
+      from: FROM_EMAIL,
+      subject: "New Advertiser Referral Submitted",
+      text: `Referral submitted by ${referrer_name} ${referrer_last_name} for ${business}`,
+    };
+    await sgMail.send(adminMsg);
 
     res.status(200).json({ success: true, message: "Referral submitted successfully." });
   } catch (err) {
