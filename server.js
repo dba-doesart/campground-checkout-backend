@@ -22,9 +22,6 @@ app.use(express.json());
 app.use(cors());
 app.use(morgan(":method :url :status :res[content-length] - :response-time ms"));
 
-// Initialize SendGrid
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-
 // ----------------------
 // CORS Configuration
 // ----------------------
