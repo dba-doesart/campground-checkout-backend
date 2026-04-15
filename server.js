@@ -19,7 +19,11 @@ dotenv.config();
 const app = express();
 app.set("trust proxy", 1);
 app.use(express.json());
+app.use(cors());
 app.use(morgan(":method :url :status :res[content-length] - :response-time ms"));
+
+// Initialize SendGrid
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 // ----------------------
 // CORS Configuration
@@ -49,6 +53,77 @@ app.use(
 app.options("*", cors());
 
 // ----------------------
+// Referral Route (extended with DB save)
+// ----------------------
+app.post("/submit-referral", async (req, res) => {
+  try {
+    const {
+      referrer_name,
+      referrer_last_name,
+      referrer_email,
+      referrer_business,
+      business,
+      dm_name,
+      dm_email,
+      dm_phone,
+      relationship,
+      permission,
+    } = req.body;
+
+    if (
+      !referrer_name ||
+      !referrer_last_name ||
+      !referrer_email ||
+      !business ||
+      !dm_name ||
+      !dm_email ||
+      !relationship ||
+      permission !== "yes"
+    ) {
+      return res.status(400).json({ error: "Missing or invalid required fields." });
+    }
+
+    // Save to MongoDB
+    const referral = new Referral({
+      referrerName: `${referrer_name} ${referrer_last_name}`,
+      referrerEmail: referrer_email,
+      friendName: dm_name,
+      friendEmail: dm_email,
+      source: "referral-form",
+      status: "email_sent",
+    });
+
+    await referral.save();
+
+    // Send notification email
+    const msg = {
+      to: "info@campgroundguides.com",
+      from: "no-reply@campgroundguides.com",
+      subject: "New Advertiser Referral Submitted",
+      text: `
+Referral details:
+Referrer: ${referrer_name} ${referrer_last_name}
+Email: ${referrer_email}
+Business: ${referrer_business || ""}
+Advertiser Business: ${business}
+Decision Maker: ${dm_name}
+DM Email: ${dm_email}
+DM Phone: ${dm_phone || ""}
+Relationship: ${relationship}
+Permission: ${permission}
+      `,
+    };
+
+    await sgMail.send(msg);
+
+    res.status(200).json({ success: true, message: "Referral submitted successfully." });
+  } catch (err) {
+    console.error("Referral error:", err);
+    res.status(500).json({ error: "Server error while submitting referral." });
+  }
+});
+
+// ----------------------
 // Environment Validation
 // ----------------------
 const PORT = process.env.PORT || 5000;
@@ -60,6 +135,14 @@ const FROM_EMAIL = process.env.FROM_EMAIL || "info@campgroundguides.com";
 if (!SENDGRID_API_KEY) console.error("❌ Missing SENDGRID_API_KEY");
 if (!SENDGRID_TEMPLATE_ID) console.error("❌ Missing SENDGRID_TEMPLATE_ID");
 if (!MONGODB_URI) console.error("❌ Missing MONGODB_URI");
+
+// ----------------------
+// Error Handler
+// ----------------------
+app.use((err, req, res, next) => {
+  console.error("Unhandled error:", err.stack);
+  res.status(500).json({ error: "Internal server error." });
+});
 
 // ----------------------
 // SendGrid Setup
@@ -135,97 +218,6 @@ app.get("/health", (req, res) => {
 // ----------------------
 app.get("/", (req, res) => {
   res.send("Campground Guides Referral API is running.");
-});
-
-// ----------------------
-// Referral Submission
-// ----------------------
-app.post("/api/referral", async (req, res) => {
-  console.log("📩 Incoming referral submission body:", req.body);
-
-  try {
-//    const { referrerName, referrerEmail, friendName, friendEmail } = req.body;
-const {
-  referrer_name,
-  referrer_last_name,
-  referrer_email,
-  referrer_business,
-  business,
-  dm_name,
-  dm_email,
-  dm_phone,
-  relationship,
-  permission
-} = req.body;
-// Required field check
-if (!referrer_name || !referrer_email || !dm_name || !dm_email) {
-  return res.status(400).json({ success: false, error: "Missing required fields" });
-}
-
-// Normalize emails
-const normalizedReferrerEmail = normalizeEmail(referrer_email);
-const normalizedDmEmail = normalizeEmail(dm_email);
-
-// Validate email formats
-if (!isValidEmail(normalizedReferrerEmail)) {
-  return res.status(400).json({ success: false, error: "Invalid referrer email format" });
-}
-if (!isValidEmail(normalizedDmEmail)) {
-  return res.status(400).json({ success: false, error: "Invalid DM email format" });
-}
-
-    if (!SENDGRID_API_KEY || !SENDGRID_TEMPLATE_ID) {
-      return res.status(500).json({ success: false, error: "Email service not configured" });
-    }
-
-    const msg = {
-      to: normalizedFriendEmail,
-      from: FROM_EMAIL,
-      templateId: SENDGRID_TEMPLATE_ID,
-      dynamic_template_data: {
-        referrerName,
-        referrerEmail: normalizedReferrerEmail,
-        friendName,
-        friendEmail: normalizedFriendEmail,
-      },
-    };
-
-    let emailError = null;
-    try {
-      await sgMail.send(msg);
-      console.log("✅ SendGrid email sent to:", normalizedFriendEmail);
-    } catch (err) {
-      emailError = err;
-      logError("SendGrid send", err);
-    }
-
-    if (MONGODB_URI) {
-      try {
-        await Referral.create({
-          referrerName,
-          referrerEmail: normalizedReferrerEmail,
-          friendName,
-          friendEmail: normalizedFriendEmail,
-          status: emailError ? "failed" : "email_sent",
-          errorMessage: emailError ? emailError.message : null,
-        });
-      } catch (dbErr) {
-        logError("MongoDB save referral", dbErr);
-      }
-    }
-
-    if (emailError) {
-      return res.status(500).json({ success: false, error: "Failed to send referral email" });
-    }
-
-    return res.status(200).json({
-      success: true,
-      redirect: "https://campgroundguides.com/thank-you-affiliate",
-    });
-  } catch (error) {
-    logError("Referral endpoint", error);
-    return res.status(500).json({ success: false, error: "Failed to process referral" });
-  }
 });
 
 // ----------------------
