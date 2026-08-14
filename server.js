@@ -1,7 +1,10 @@
+
 /* ======================================================
    Campground Guides Referral API - server.js
    Clean, safe, stable version with phone number + full emails
    ====================================================== */
+
+import checkoutRoutes from "./routes/checkout.js";
 
 const express = require("express");
 const cors = require("cors");
@@ -20,6 +23,7 @@ const app = express();
 app.set("trust proxy", 1);
 app.use(express.json());
 app.use(morgan(":method :url :status :res[content-length] - :response-time ms"));
+app.use("/api", checkoutRoutes);
 
 // ----------------------
 // CORS Configuration
