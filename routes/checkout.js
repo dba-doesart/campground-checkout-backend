@@ -4,7 +4,19 @@ import Stripe from "stripe";
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-// Your price table
+// Tennessee Product IDs (for metadata only — NOT pricing)
+const productIds = {
+  "Cherokee Dam Campground": "prod_T1IHVoct838VPf",
+  "Greenlee of May Springs": "prod_TFoxoMQJjPsPBM",
+  "Greenlee - Original Campground": "prod_TFpKWzm03F6Nn4",
+  "Melton Hill Dam Campground": "prod_T1ILUnX3savDp8",
+  "Yarberry Campground": "prod_T1IMdXTVqc4CFT",
+  "Headwater Campground": "prod_V4Vs60hPRmGhT3",
+  "Tailwater Campground": "prod_V4Vs60hPRmGhT3",   // same product for both
+  "Two Rivers Landing": "prod_V48vzUfNo17gK9"
+};
+
+// Multi‑park pricing table (already correct)
 const PRICE_TABLE = {
   monthly: {
     1: "price_1U47y2Hw2ZCjSnG408sI7KX1",
@@ -30,10 +42,15 @@ const PRICE_TABLE = {
 
 router.post("/create-checkout", async (req, res) => {
   try {
-    const { parkCount, billingCycle, selectedParks, email } = req.body;
+    const { selectedParks, billingCycle, email } = req.body;
 
+    // Count how many parks were selected
+    const parkCount = selectedParks.length;
+
+    // Select correct Stripe price ID based on count + billing cycle
     const priceId = PRICE_TABLE[billingCycle][parkCount];
 
+    // Create Stripe Checkout Session
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       line_items: [
@@ -43,20 +60,26 @@ router.post("/create-checkout", async (req, res) => {
         }
       ],
       customer_email: email,
+
+      // Metadata for your Stripe dashboard
       metadata: {
         parks_selected: selectedParks.join(", "),
+        product_ids: selectedParks.map(p => productIds[p]).join(", "),
         park_count: parkCount,
         billing_cycle: billingCycle
       },
+
       success_url: process.env.SUCCESS_URL,
       cancel_url: process.env.CANCEL_URL
     });
 
     res.json({ url: session.url });
+
   } catch (error) {
-    console.error(error);
+    console.error("Checkout error:", error);
     res.status(500).json({ error: "Unable to create checkout session" });
   }
 });
 
 export default router;
+
