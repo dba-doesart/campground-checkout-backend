@@ -3,17 +3,17 @@
    Clean, safe, stable version with phone number + full emails
    ====================================================== */
 
+
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import mongoose from "mongoose";
+import sgMail from "@sendgrid/mail";
+import morgan from "morgan";
 import checkoutRoutes from "./routes/checkout.js";
 
-const express = require("express");
-const cors = require("cors");
-const dotenv = require("dotenv");
-const mongoose = require("mongoose");
-const sgMail = require("@sendgrid/mail");
-const morgan = require("morgan");
-
-// Environment Variables
 dotenv.config();
+
 
 // ----------------------
 // Basic Config
