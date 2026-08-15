@@ -32,6 +32,7 @@ const allowedOrigins = [
   "https://campgroundguides.com",
   "https://www.campgroundguides.com",
   "https://affiliate.campgroundguides.com",
+  "https://multi-park.campgroundguides.com",
   "http://localhost:3000",
 ];
 
