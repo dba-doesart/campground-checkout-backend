@@ -8,7 +8,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
-import sgMail from "@sendgrid/mail";
+import nodemailer from "nodemailer";
 import morgan from "morgan";
 import checkoutRoutes from "./routes/checkout.js";
 
@@ -58,10 +58,14 @@ app.options("*", cors());
 // ----------------------
 const PORT = process.env.PORT || 5000;
 const MONGODB_URI = process.env.MONGODB_URI;
-const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
+const SMTP_HOST = process.env.SMTP_HOST || "smtp.hostinger.com";
+const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
+const SMTP_USER = process.env.SMTP_USER || "info@campgroundguides.com";
+const SMTP_PASS = process.env.SMTP_PASS;
 const FROM_EMAIL = process.env.FROM_EMAIL || "info@campgroundguides.com";
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "info@campgroundguides.com";
 
-if (!SENDGRID_API_KEY) console.error("❌ Missing SENDGRID_API_KEY");
+if (!SMTP_PASS) console.error("❌ Missing SMTP_PASS (Hostinger mailbox password)");
 if (!MONGODB_URI) console.error("❌ Missing MONGODB_URI");
 
 // ----------------------
@@ -73,10 +77,29 @@ app.use((err, req, res, next) => {
 });
 
 // ----------------------
-// SendGrid Setup
+// Email Setup (Hostinger mailbox via SMTP)
 // ----------------------
-if (SENDGRID_API_KEY) {
-  sgMail.setApiKey(SENDGRID_API_KEY);
+const mailer = nodemailer.createTransport({
+  host: SMTP_HOST,
+  port: SMTP_PORT,
+  secure: SMTP_PORT === 465, // SSL on 465, STARTTLS on 587
+  auth: { user: SMTP_USER, pass: SMTP_PASS },
+});
+
+if (SMTP_PASS) {
+  mailer
+    .verify()
+    .then(() => console.log("✅ Email (SMTP) ready"))
+    .catch((err) => console.error("❌ Email (SMTP) login failed:", err.message));
+}
+
+async function sendMail({ to, subject, text }) {
+  return mailer.sendMail({
+    from: `"Campground Guides" <${FROM_EMAIL}>`,
+    to,
+    subject,
+    text,
+  });
 }
 
 // ----------------------
@@ -143,9 +166,11 @@ app.post("/api/referrals", async (req, res) => {
       dm_name,
       dm_email,
       dm_phone_number,
-      relationship,
       permission,
     } = req.body;
+    const relationship =
+      (req.body.relationship && String(req.body.relationship).trim()) ||
+      "Not provided";
 
     // Validate required fields
     if (
@@ -155,7 +180,6 @@ app.post("/api/referrals", async (req, res) => {
       !business ||
       !dm_name ||
       !dm_email ||
-      !relationship ||
       permission !== "yes"
     ) {
       return res
@@ -182,10 +206,14 @@ app.post("/api/referrals", async (req, res) => {
 
     // ----------------------
     // Send Emails
+    // The referral is already saved, so an email problem should not
+    // show the person an error (that caused duplicate submissions).
+    // Failures are logged and recorded on the referral instead.
     // ----------------------
+    try {
 
     // Thank-you email to referrer
-    await sgMail.send({
+    await sendMail({
       to: referrer_email,
       from: FROM_EMAIL,
       subject: "Thank you for your referral!",
@@ -197,7 +225,7 @@ Thank you for referring ${business} to Campground Guides! We appreciate your sup
     });
 
     // Heads-up email to the referred business
-    await sgMail.send({
+    await sendMail({
       to: dm_email,
       from: FROM_EMAIL,
       subject: "You were recommended to Campground Guides",
@@ -217,8 +245,7 @@ Campground Guides`,
 
     // Admin notification (full details)
     const adminMsg = {
-      to: "info@campgroundguides.com",
-      from: FROM_EMAIL,
+      to: ADMIN_EMAIL,
       subject: "New Advertiser Referral Submitted",
       text: `A new advertiser referral has been submitted.
 
@@ -237,7 +264,13 @@ Permission to Contact: ${permission}
 Submitted via Campground Guides Referral Form.`,
     };
 
-    await sgMail.send(adminMsg);
+    await sendMail(adminMsg);
+    } catch (emailErr) {
+      console.error("Referral email error:", emailErr.message);
+      referral.status = "email_failed";
+      referral.errorMessage = emailErr.message;
+      await referral.save().catch(() => {});
+    }
 
     res
       .status(200)
