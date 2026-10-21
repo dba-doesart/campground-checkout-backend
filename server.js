@@ -235,8 +235,7 @@ You were recommended to us by someone who thinks highly of your business. At Cam
 
 We’d love to show you how your business could appear on our interactive map — complete with photos, videos, and your story.
 
-If you’d like a quick 15‑minute walkthrough, you can schedule here:
-[Calendar Link]
+If you’d like a quick 15‑minute walkthrough, just reply to this email and we’ll set up a time.
 
 Warm regards,
 Wade & Diana Wilson
